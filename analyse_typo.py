@@ -381,7 +381,7 @@ def _regles_fr(ce: dict) -> list:
         regles.append({
             "id": "R-FR-08",
             "nom": "Apostrophe droite",
-            "pattern": re.compile(r"(?<=[a-zA-ZÀ-ÿ])'(?=[a-zA-ZÀ-ÿ])"),
+            "pattern": re.compile(r"(?<=[a-zA-ZÀ-ÿœŒæÆ])'(?=[a-zA-ZÀ-ÿœŒæÆ])"),
             "description": "Apostrophe droite U+0027 au lieu de typographique U+2019",
             "correction": "Remplacer ' (U+0027) par \u2019 (U+2019)",
         })
@@ -390,7 +390,7 @@ def _regles_fr(ce: dict) -> list:
         regles.append({
             "id": "R-FR-08b",
             "nom": "Apostrophe typographique résiduelle",
-            "pattern": re.compile(r"(?<=[a-zA-ZÀ-ÿ])\u2019(?=[a-zA-ZÀ-ÿ])"),
+            "pattern": re.compile(r"(?<=[a-zA-ZÀ-ÿœŒæÆ])\u2019(?=[a-zA-ZÀ-ÿœŒæÆ])"),
             "description": "Apostrophe typographique U+2019 utilisée au lieu de U+0027 (convention de la version)",
             "correction": "Remplacer \u2019 (U+2019) par ' (U+0027) pour cohérence",
         })
@@ -788,7 +788,7 @@ def _highlight_extrait(extrait: str, regle_id: str) -> str:
         "R-FR-02": (r'(\S)(\s\.)(?!\.)', 1),
         "R-FR-03": (r'(\.{3})', 0),
         "R-FR-04": (r'(\u2026[A-Z\u00C0-\u017Ea-z\u00E0-\u017E])', 0),
-        "R-FR-08b": (r'([a-zA-Z\u00C0-\u00FF]\u2019[a-zA-Z\u00C0-\u00FF])', 0),
+        "R-FR-08b": (r'([a-zA-Z\u00C0-\u00FF\u0153\u0152\u00E6\u00C6]\u2019[a-zA-Z\u00C0-\u00FF\u0153\u0152\u00E6\u00C6])', 0),
         "R-FR-09": (r'( - (?=\S)| -$|^- )', 0),
         "R-FR-10": (r'([^\S\n]{2,})', 0),
     }
