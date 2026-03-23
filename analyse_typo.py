@@ -502,24 +502,60 @@ def _regles_es(ce: dict) -> list:
 
 @dataclass
 class VerseText:
-    """Texte d'un verset avec sa référence."""
+    """Texte d'un verset avec sa référence et son type de contenu."""
     livre: str
     chapitre: str
     verset: str
     texte: str
-    contexte: str  # 'texte' ou 'note'
+    contexte: str  # 'texte', 'titre', 'note', 'introduction', 'référence'
 
     @property
     def reference(self) -> str:
         return f"{self.livre} {self.chapitre}:{self.verset}"
 
 
+# Classification des styles USX <para> en types de contenu
+_STYLE_CONTEXTE = {
+    # Texte biblique courant
+    'p': 'texte', 'nb': 'texte', 'm': 'texte', 'mi': 'texte',
+    'q': 'texte', 'q1': 'texte', 'q2': 'texte', 'q3': 'texte',
+    'qr': 'texte', 'qc': 'texte', 'qm': 'texte', 'qm1': 'texte', 'qm2': 'texte',
+    'b': 'texte',
+    'pi': 'texte', 'pi1': 'texte', 'pi2': 'texte',
+    'li': 'texte', 'li1': 'texte', 'li2': 'texte',
+    'pc': 'texte', 'cls': 'texte', 'pm': 'texte', 'pmo': 'texte', 'pmc': 'texte',
+    # Titres et péricopes
+    's': 'titre', 's1': 'titre', 's2': 'titre', 's3': 'titre',
+    'ms': 'titre', 'ms1': 'titre', 'ms2': 'titre',
+    'mt': 'titre', 'mt1': 'titre', 'mt2': 'titre', 'mt3': 'titre',
+    'mte': 'titre', 'mte1': 'titre', 'mte2': 'titre',
+    'd': 'titre', 'sp': 'titre',
+    # Références de section
+    'r': 'référence', 'mr': 'référence', 'sr': 'référence',
+    # Introductions
+    'ip': 'introduction', 'ipi': 'introduction', 'im': 'introduction',
+    'is': 'introduction', 'is1': 'introduction', 'is2': 'introduction',
+    'imi': 'introduction', 'imq': 'introduction', 'ipr': 'introduction',
+    'iq': 'introduction', 'iq1': 'introduction', 'iq2': 'introduction',
+    'iot': 'introduction', 'io': 'introduction', 'io1': 'introduction',
+    'io2': 'introduction', 'iex': 'introduction',
+}
+
+# Styles de métadonnées à ignorer (pas du contenu à analyser)
+_STYLES_IGNORES = {'id', 'ide', 'h', 'toc1', 'toc2', 'toc3', 'rem'}
+
+
 def parse_usx(filepath: str) -> list[VerseText]:
     """Parse un fichier USX 3.0 et retourne une liste de VerseText.
 
-    Stratégie : parcours linéaire de tous les éléments XML, en suivant
-    le chapitre/verset courant et en segmentant le texte par verset.
-    Les notes sont collectées séparément avec leur propre contexte.
+    Parcours exhaustif de TOUS les noeuds de texte du fichier :
+    - Texte biblique courant (p, q, nb, m, li…)
+    - Titres de péricopes (s, ms, d, sp…)
+    - Notes de bas de page (note)
+    - Introductions (ip, is, io…)
+    - Références de section (r, mr, sr)
+
+    Les styles de métadonnées (h, toc*, rem, id) sont les seuls exclus.
     """
     tree = ET.parse(filepath)
     root = tree.getroot()
@@ -531,6 +567,7 @@ def parse_usx(filepath: str) -> list[VerseText]:
     versets: list[VerseText] = []
     current_chapter = "0"
     current_verse = "0"
+    current_contexte = "texte"
 
     def _extract_all_text(elem) -> str:
         """Extrait récursivement tout le texte d'un élément (hors notes)."""
@@ -581,13 +618,13 @@ def parse_usx(filepath: str) -> list[VerseText]:
                     chapitre=current_chapter,
                     verset=current_verse,
                     texte=combined,
-                    contexte='texte',
+                    contexte=current_contexte,
                 ))
             text_buffer = []
 
     def process_element(elem):
         """Traite un élément et ses enfants, en suivant chapitre/verset."""
-        nonlocal current_chapter, current_verse, text_buffer
+        nonlocal current_chapter, current_verse, current_contexte, text_buffer
 
         if elem.tag == 'chapter' and 'number' in elem.attrib:
             flush_buffer()
@@ -614,8 +651,13 @@ def parse_usx(filepath: str) -> list[VerseText]:
 
         if elem.tag == 'para':
             style = elem.attrib.get('style', '')
-            if style in ('id', 'ide', 'h', 'toc1', 'toc2', 'toc3', 'rem'):
+            # Ignorer les métadonnées
+            if style in _STYLES_IGNORES:
                 return
+            # Déterminer le contexte à partir du style
+            # Les styles non mappés sont traités comme 'texte' par défaut
+            flush_buffer()
+            current_contexte = _STYLE_CONTEXTE.get(style, 'texte')
 
         if elem.tag == 'char':
             text_buffer.append(_extract_all_text(elem))
@@ -1004,10 +1046,17 @@ def generer_html(anomalies: list[Anomalie], filepath: str, version: str):
     white-space: nowrap;
   }}
   .ctx {{
-    font-size: 0.75rem;
-    color: var(--muted);
+    font-size: 0.7rem;
     text-transform: uppercase;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
   }}
+  .ctx-texte {{ color: var(--text); }}
+  .ctx-titre {{ color: var(--purple); }}
+  .ctx-note {{ color: var(--amber); }}
+  .ctx-introduction {{ color: var(--green); }}
+  .ctx-référence {{ color: var(--slate); }}
   .extrait {{
     font-family: 'SF Mono', 'Fira Code', monospace;
     font-size: 0.85rem;
@@ -1251,7 +1300,7 @@ def generer_html(anomalies: list[Anomalie], filepath: str, version: str):
                 highlighted = _highlight_extrait(a.extrait, a.regle_id)
                 html_content += f"""        <tr>
           <td class="ref">{html.escape(a.reference)}</td>
-          <td class="ctx">{html.escape(a.contexte)}</td>
+          <td class="ctx ctx-{html.escape(a.contexte)}">{html.escape(a.contexte)}</td>
           <td><span class="extrait">{highlighted}</span></td>
         </tr>
 """
