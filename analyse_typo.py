@@ -27,15 +27,16 @@ from typing import Optional
 
 @dataclass
 class Anomalie:
-    """Représente une anomalie typographique détectée."""
+    """Représente une anomalie ou observation typographique détectée."""
     livre: str
     reference: str
     extrait: str
     anomalie: str
     correction: str
     regle_id: str
-    contexte: str  # 'texte' ou 'note'
+    contexte: str  # 'texte', 'titre', 'note', 'introduction', 'référence'
     position: int = 0  # position dans le texte pour le surlignage
+    type: str = "anomalie"  # 'anomalie' ou 'observation'
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -206,10 +207,10 @@ PROFILS_VERSIONS = {
              "\u00ABmot \u2014 collé au texte (Type B)", None),
             (None, "Guillemet fermant \u00BB", "\u00BB", "U+00BB", "Choix éditorial",
              "mot\u00BB \u2014 collé au texte (Type B)", None),
-            (None, "Guillemet fermant \u00BB (reprise)", "\u00BB", "U+00BB", "Choix éditorial",
-             "\u00BBMot \u2014 guillemets de reprise (convention S21)", None),
+            (None, "Guillemet fermant \u00BB (reprise)", "\u00BB", "U+00BB", "Observation",
+             "\u00BBMot \u2014 guillemets de reprise (convention S21)", "O-FR-01"),
             (None, "Astérisque + guillemet", "*\u00AB", None, "Observation",
-             "*\u00AB : astérisque collé avant guillemet ouvrant", None),
+             "*\u00AB : astérisque collé avant guillemet ouvrant", "O-FR-02"),
             (None, "Guillemets simples (2nd niv.)", "\u2018 \u2019", "U+2018/9", "Choix éditorial",
              "Second niveau de citation", None),
             ("APOSTROPHES", None, None, None, None, None, None),
@@ -217,6 +218,8 @@ PROFILS_VERSIONS = {
              "Apostrophe droite U+0027 (Type B)", None),
             (None, "Apostrophe typo (anomalie)", "\u2019", "U+2019", "Anomalie",
              "U+2019 utilisée comme apostrophe au lieu de U+0027", "R-FR-08b"),
+            (None, "Séparateur de milliers", "\u2019", "U+2019", "Observation",
+             "U+2019 comme séparateur de milliers entre chiffres (12\u2019000)", "O-FR-03"),
             ("TIRETS", None, None, None, None, None, None),
             (None, "Trait d'union (incise)", "-", "U+002D", "Anomalie",
              "Trait d'union comme tiret d'incise (espace - espace)", "R-FR-09"),
@@ -321,12 +324,20 @@ def _regles_fr(ce: dict) -> list:
     })
 
     # Points de suspension : toujours U+2026, jamais trois points
+    # Détecte ... (collés) et . . . (espacés)
     regles.append({
-        "id": "R-FR-03",
-        "nom": "Triple point au lieu de …",
+        "id": "R-FR-03a",
+        "nom": "Triple point collé au lieu de …",
         "pattern": re.compile(r'\.{3}'),
-        "description": "Trois points au lieu du caractère … (U+2026)",
+        "description": "Trois points consécutifs ... au lieu du caractère … (U+2026)",
         "correction": "Remplacer ... par … (U+2026)",
+    })
+    regles.append({
+        "id": "R-FR-03b",
+        "nom": "Triple point espacé au lieu de …",
+        "pattern": re.compile(r'\. \. \.'),
+        "description": "Trois points espacés . . . au lieu du caractère … (U+2026)",
+        "correction": "Remplacer . . . par … (U+2026)",
     })
 
     # Points de suspension collés au mot suivant (pas d'espace après)
@@ -414,6 +425,41 @@ def _regles_fr(ce: dict) -> list:
         "correction": "Réduire à une seule espace",
         "exclure_contexte": "note",  # les notes ont parfois un formatage spécial
     })
+
+    # ── OBSERVATIONS (cas notables, ni anomalies ni choix éditoriaux) ──
+
+    # Guillemets de reprise »Mot (continuation de discours direct)
+    if ce.get("guillemets_reprise"):
+        regles.append({
+            "id": "O-FR-01",
+            "nom": "Guillemet de reprise »Mot",
+            "pattern": re.compile(r'»[A-ZÀ-ÿœŒ]'),
+            "description": "Guillemet de reprise » collé au mot — continuation de discours direct",
+            "correction": "Convention S21 : pas de correction nécessaire",
+            "type": "observation",
+        })
+
+    # Astérisque collé avant guillemet ouvrant *«
+    if ce.get("asterisque_guillemet"):
+        regles.append({
+            "id": "O-FR-02",
+            "nom": "Combinaison *« (astérisque + guillemet)",
+            "pattern": re.compile(r'\*«'),
+            "description": "Astérisque collé avant guillemet ouvrant *« — passage biblique cité",
+            "correction": "Convention S21 : pas de correction nécessaire",
+            "type": "observation",
+        })
+
+    # Séparateur de milliers U+2019 entre chiffres (ex. 12'000)
+    if ce.get("apostrophe_droite"):
+        regles.append({
+            "id": "O-FR-03",
+            "nom": "Séparateur de milliers U+2019",
+            "pattern": re.compile(r'\d\u2019\d{3}'),
+            "description": "U+2019 utilisé comme séparateur de milliers entre chiffres",
+            "correction": "À vérifier : usage courant en Suisse romande",
+            "type": "observation",
+        })
 
     return regles
 
@@ -728,6 +774,7 @@ def analyser_fichier(filepath: str, version: str) -> list[Anomalie]:
                     regle_id=regle["id"],
                     contexte=verset.contexte,
                     position=match.start(),
+                    type=regle.get("type", "anomalie"),
                 ))
 
     return anomalies
@@ -787,10 +834,15 @@ def _highlight_extrait(extrait: str, regle_id: str) -> str:
         "R-FR-01": (r'(\S)(\s,)', 1),
         "R-FR-02": (r'(\S)(\s\.)(?!\.)', 1),
         "R-FR-03": (r'(\.{3})', 0),
+        "R-FR-03a": (r'(\.{3})', 0),
+        "R-FR-03b": (r'(\. \. \.)', 0),
         "R-FR-04": (r'(\u2026[A-Z\u00C0-\u017Ea-z\u00E0-\u017E])', 0),
         "R-FR-08b": (r'([a-zA-Z\u00C0-\u00FF\u0153\u0152\u00E6\u00C6]\u2019[a-zA-Z\u00C0-\u00FF\u0153\u0152\u00E6\u00C6])', 0),
         "R-FR-09": (r'( - (?=\S)| -$|^- )', 0),
         "R-FR-10": (r'([^\S\n]{2,})', 0),
+        "O-FR-01": (r'(\u00BB[A-Z\u00C0-\u00FF\u0153\u0152])', 0),
+        "O-FR-02": (r'(\*\u00AB)', 0),
+        "O-FR-03": (r'(\d\u2019\d{3})', 0),
     }
 
     if regle_id not in highlights:
@@ -814,27 +866,38 @@ def _highlight_extrait(extrait: str, regle_id: str) -> str:
 
 def generer_html(anomalies: list[Anomalie], filepath: str, version: str):
     """Génère un rapport HTML complet avec :
-    1. Section choix éditoriaux Type B
-    2. Tableau de synthèse (RAS / Choix éditorial / Anomalie)
-    3. Détail des anomalies avec surlignage en contexte
+    1. Tableau de synthèse (RAS / Choix éditorial / Anomalie)
+    2. Choix éditoriaux Type B
+    3. Anomalies détaillées avec surlignage en contexte
+    4. Observations (cas notables, ni anomalies ni choix éditoriaux)
     """
     profil = PROFILS_VERSIONS.get(version, {})
     nom_version = profil.get("nom", version)
     choix_detail = profil.get("choix_editoriaux_detail", [])
     synthese = profil.get("synthese_signes", [])
 
-    # Regrouper anomalies par règle
+    # Séparer anomalies et observations
+    vraies_anomalies = [a for a in anomalies if a.type == "anomalie"]
+    observations = [a for a in anomalies if a.type == "observation"]
+
+    # Regrouper anomalies par règle (sans les observations)
     par_regle: dict[str, list[Anomalie]] = {}
-    for a in anomalies:
+    for a in vraies_anomalies:
         key = f"{a.regle_id} — {a.anomalie}"
         par_regle.setdefault(key, []).append(a)
 
-    # Compter par livre
+    # Regrouper observations par règle
+    par_obs: dict[str, list[Anomalie]] = {}
+    for a in observations:
+        key = f"{a.regle_id} — {a.anomalie}"
+        par_obs.setdefault(key, []).append(a)
+
+    # Compter par livre (anomalies seulement)
     par_livre: dict[str, int] = {}
-    for a in anomalies:
+    for a in vraies_anomalies:
         par_livre[a.livre] = par_livre.get(a.livre, 0) + 1
 
-    # Compter par regle_id pour la synthèse
+    # Compter par regle_id pour la synthèse (anomalies + observations)
     count_par_regle_id: dict[str, int] = {}
     for a in anomalies:
         count_par_regle_id[a.regle_id] = count_par_regle_id.get(a.regle_id, 0) + 1
@@ -1105,16 +1168,16 @@ def generer_html(anomalies: list[Anomalie], filepath: str, version: str):
 <!-- ═══ STATISTIQUES ═══ -->
 <div class="stats">
   <div class="stat-card">
-    <div class="number">{len(anomalies)}</div>
+    <div class="number">{len(vraies_anomalies)}</div>
     <div class="label">anomalies détectées</div>
   </div>
   <div class="stat-card ok">
     <div class="number">{nb_choix_b}</div>
     <div class="label">choix éditoriaux (Type B)</div>
   </div>
-  <div class="stat-card info">
-    <div class="number">{len(par_regle)}</div>
-    <div class="label">types d'anomalies</div>
+  <div class="stat-card" style="--accent:#d97706">
+    <div class="number" style="color:var(--amber)">{len(observations)}</div>
+    <div class="label">observations</div>
   </div>
   <div class="stat-card info">
     <div class="number">{len(par_livre)}</div>
@@ -1126,7 +1189,8 @@ def generer_html(anomalies: list[Anomalie], filepath: str, version: str):
 <div class="nav-tabs">
   <div class="nav-tab active" onclick="showTab('tab-synthese')">Synthèse</div>
   <div class="nav-tab" onclick="showTab('tab-choix')">Choix éditoriaux</div>
-  <div class="nav-tab" onclick="showTab('tab-anomalies')">Anomalies détaillées</div>
+  <div class="nav-tab" onclick="showTab('tab-anomalies')">Anomalies ({len(vraies_anomalies)})</div>
+  <div class="nav-tab" onclick="showTab('tab-observations')">Observations ({len(observations)})</div>
 </div>
 """
 
@@ -1183,10 +1247,14 @@ def generer_html(anomalies: list[Anomalie], filepath: str, version: str):
                 if regle_lien and regle_lien in count_par_regle_id:
                     nb = f'<strong style="color: var(--accent)">{count_par_regle_id[regle_lien]}</strong>'
 
-                # Lien vers la section détaillée si c'est une anomalie trouvée
+                # Lien vers la section détaillée (anomalie ou observation)
                 nom_display = html.escape(nom or "")
                 if regle_lien and regle_lien in count_par_regle_id:
-                    nom_display = f'<a href="#detail-{regle_lien}" style="color:var(--accent);text-decoration:none;font-weight:600">{nom_display}</a>'
+                    if regle_lien.startswith("O-"):
+                        nom_display = f'<a href="#obs-{regle_lien}" style="color:var(--amber);text-decoration:none;font-weight:600">{nom_display}</a>'
+                        nb = f'<strong style="color: var(--amber)">{count_par_regle_id[regle_lien]}</strong>'
+                    else:
+                        nom_display = f'<a href="#detail-{regle_lien}" style="color:var(--accent);text-decoration:none;font-weight:600">{nom_display}</a>'
 
                 html_content += f"""    <tr>
       <td>{nom_display}</td>
@@ -1269,7 +1337,7 @@ def generer_html(anomalies: list[Anomalie], filepath: str, version: str):
 </p>
 """
 
-    if not anomalies:
+    if not vraies_anomalies:
         html_content += '<p style="color:var(--green);font-weight:600;font-size:1.1rem;padding:2rem 0">Aucune anomalie détectée.</p>\n'
     else:
         for i, (key, items) in enumerate(sorted(par_regle.items())):
@@ -1314,6 +1382,62 @@ def generer_html(anomalies: list[Anomalie], filepath: str, version: str):
     html_content += "</div>\n"
 
     # ═══════════════════════════════════════════════════════
+    # ONGLET 4 — OBSERVATIONS
+    # ═══════════════════════════════════════════════════════
+    html_content += """
+<div id="tab-observations" class="tab-content">
+<h2>Observations</h2>
+<p style="color: #78716c; font-size: 0.9rem; margin-bottom: 1rem;">
+  Cas notables qui ne sont ni des anomalies ni des choix éditoriaux.
+  Ce sont des usages spécifiques de la version, documentés ici pour référence.
+</p>
+"""
+
+    if not observations:
+        html_content += '<p style="color:var(--muted);font-style:italic;padding:2rem 0">Aucune observation détectée.</p>\n'
+    else:
+        for i, (key, items) in enumerate(sorted(par_obs.items())):
+            regle_id = items[0].regle_id if items else ""
+            correction = items[0].correction if items else ""
+
+            html_content += f"""
+<div class="section" id="obs-{regle_id}">
+  <div class="section-header">
+    <h3>{html.escape(key)}</h3>
+    <span class="badge badge-obs">{len(items)} cas</span>
+  </div>
+  <div class="note-text">
+    {html.escape(correction)}
+  </div>
+  <div class="section-body">
+    <table>
+      <thead>
+        <tr>
+          <th style="width:10%">Référence</th>
+          <th style="width:5%">Ctx</th>
+          <th>Extrait en contexte</th>
+        </tr>
+      </thead>
+      <tbody>
+"""
+            for a in items:
+                highlighted = _highlight_extrait(a.extrait, a.regle_id)
+                html_content += f"""        <tr>
+          <td class="ref">{html.escape(a.reference)}</td>
+          <td class="ctx ctx-{html.escape(a.contexte)}">{html.escape(a.contexte)}</td>
+          <td><span class="extrait">{highlighted}</span></td>
+        </tr>
+"""
+
+            html_content += """      </tbody>
+    </table>
+  </div>
+</div>
+"""
+
+    html_content += "</div>\n"
+
+    # ═══════════════════════════════════════════════════════
     # SCRIPT + FOOTER
     # ═══════════════════════════════════════════════════════
     html_content += f"""
@@ -1328,12 +1452,19 @@ function showTab(tabId) {{
   document.getElementById(tabId).classList.add('active');
   event.target.classList.add('active');
 }}
-// Handle anchor links to anomaly details
-if (window.location.hash && window.location.hash.startsWith('#detail-')) {{
-  showTab('tab-anomalies');
-  document.querySelector('.nav-tab:nth-child(3)').classList.add('active');
-  document.querySelector('.nav-tab:nth-child(1)').classList.remove('active');
-}}
+// Handle anchor links to anomaly/observation details
+(function() {{
+  var h = window.location.hash;
+  if (h && h.startsWith('#detail-')) {{
+    showTab('tab-anomalies');
+    document.querySelectorAll('.nav-tab').forEach(function(t) {{ t.classList.remove('active'); }});
+    document.querySelector('.nav-tab:nth-child(3)').classList.add('active');
+  }} else if (h && h.startsWith('#obs-')) {{
+    showTab('tab-observations');
+    document.querySelectorAll('.nav-tab').forEach(function(t) {{ t.classList.remove('active'); }});
+    document.querySelector('.nav-tab:nth-child(4)').classList.add('active');
+  }}
+}})();
 </script>
 
 </body>
@@ -1404,21 +1535,34 @@ Exemples :
         print(f"  Analyse de {filepath}…", file=sys.stderr)
         anomalies = analyser_fichier(filepath, version)
 
+    # Séparer anomalies et observations
+    vraies_anomalies = [a for a in anomalies if a.type == "anomalie"]
+    observations = [a for a in anomalies if a.type == "observation"]
+
     # Résumé
     print(f"\n{'='*60}", file=sys.stderr)
-    print(f"  RÉSULTAT : {len(anomalies)} anomalies détectées", file=sys.stderr)
+    print(f"  RÉSULTAT : {len(vraies_anomalies)} anomalies, {len(observations)} observations", file=sys.stderr)
     print(f"{'='*60}", file=sys.stderr)
 
-    if anomalies:
-        # Résumé par type
+    if vraies_anomalies:
+        print("  Anomalies :", file=sys.stderr)
         par_regle: dict[str, int] = {}
-        for a in anomalies:
-            key = f"{a.regle_id} — {a.anomalie}"
+        for a in vraies_anomalies:
+            key = f"  {a.regle_id} — {a.anomalie}"
             par_regle[key] = par_regle.get(key, 0) + 1
-
         for key, count in sorted(par_regle.items()):
             print(f"  {key} : {count} cas", file=sys.stderr)
 
+    if observations:
+        print("  Observations :", file=sys.stderr)
+        par_obs: dict[str, int] = {}
+        for a in observations:
+            key = f"  {a.regle_id} — {a.anomalie}"
+            par_obs[key] = par_obs.get(key, 0) + 1
+        for key, count in sorted(par_obs.items()):
+            print(f"  {key} : {count} cas", file=sys.stderr)
+
+    if anomalies:
         # Génération des rapports
         csv_path = f"{args.sortie}.csv"
         html_path = f"{args.sortie}.html"
@@ -1428,7 +1572,7 @@ Exemples :
 
         print(f"\nTerminé. Rapports : {csv_path}, {html_path}", file=sys.stderr)
     else:
-        print("  Aucune anomalie détectée.", file=sys.stderr)
+        print("  Aucune anomalie ni observation détectée.", file=sys.stderr)
 
 
 if __name__ == "__main__":
