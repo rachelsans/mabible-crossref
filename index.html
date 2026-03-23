@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>maBible — Outil de test des références croisées</title>
+<style>
+  :root {
+    --violet: #7c3aed;
+    --violet-bg: #ede9fe;
+    --vert: #16a34a;
+    --vert-bg: #dcfce7;
+    --bleu: #2563eb;
+    --bleu-bg: #dbeafe;
+    --ambre: #d97706;
+    --ambre-bg: #fef3c7;
+    --or: #b8860b;
+    --or-bg: #fdf6e3;
+    --gris-50: #f9fafb;
+    --gris-100: #f3f4f6;
+    --gris-200: #e5e7eb;
+    --gris-300: #d1d5db;
+    --gris-400: #9ca3af;
+    --gris-500: #6b7280;
+    --gris-600: #4b5563;
+    --gris-700: #374151;
+    --gris-800: #1f2937;
+    --gris-900: #111827;
+    --radius: 6px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--gris-50);
+    color: var(--gris-800);
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  /* ── Header ── */
+  header {
+    background: #fff;
+    border-bottom: 1px solid var(--gris-200);
+    padding: 12px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  header h1 {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--gris-900);
+  }
+  header .subtitle {
+    font-size: 13px;
+    color: var(--gris-500);
+    font-style: italic;
+  }
+
+  /* ── Layout ── */
+  .container {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 24px;
+  }
+
+  /* ── Config bar ── */
+  .config-bar {
+    background: #fff;
+    border: 1px solid var(--gris-200);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 20px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: flex-end;
+  }
+  .config-bar .field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .config-bar .field label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--gris-500);
+  }
+  .config-bar .field select,
+  .config-bar .field input {
+    padding: 6px 10px;
+    border: 1px solid var(--gris-300);
+    border-radius: var(--radius);
+    font-size: 14px;
+    background: #fff;
+    color: var(--gris-800);
+  }
+  .config-bar .field input[type="password"] {
+    width: 280px;
+    font-family: monospace;
+    font-size: 12px;
+  }
+  .config-bar .field input[type="number"] {
+    width: 64px;
+    text-align: center;
+  }
+  .config-bar .field select {
+    min-width: 140px;
+  }
+  .btn {
+    padding: 6px 16px;
+    border: 1px solid var(--gris-300);
+    border-radius: var(--radius);
+    background: #fff;
+    font-size: 14px;
+    cursor: pointer;
+    color: var(--gris-700);
+    transition: background 0.15s;
+  }
+  .btn:hover { background: var(--gris-100); }
+  .btn-primary {
+    background: var(--gris-800);
+    color: #fff;
+    border-color: var(--gris-800);
+  }
+  .btn-primary:hover { background: var(--gris-700); }
+  .btn-primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* ── Verse display ── */
+  .verse-card {
+    background: #fff;
+    border: 1px solid var(--gris-200);
+    border-radius: var(--radius);
+    margin-bottom: 20px;
+    overflow: hidden;
+  }
+  .verse-card-header {
+    padding: 12px 16px;
+    background: var(--gris-100);
+    border-bottom: 1px solid var(--gris-200);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .verse-card-header h2 {
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .verse-card-header .version-badge {
+    font-size: 11px;
+    font-weight: 600;
+    background: var(--gris-200);
+    padding: 2px 8px;
+    border-radius: 10px;
+    color: var(--gris-600);
+  }
+  .verse-text {
+    padding: 20px;
+    font-size: 18px;
+    line-height: 1.8;
+  }
+
+  /* ── Fragment colors ── */
+  .frag-violet {
+    background: var(--violet-bg);
+    border-bottom: 2px solid var(--violet);
+    padding: 1px 3px;
+    border-radius: 2px;
+  }
+  .frag-vert {
+    background: var(--vert-bg);
+    border-bottom: 2px solid var(--vert);
+    padding: 1px 3px;
+    border-radius: 2px;
+  }
+  .frag-bleu {
+    background: var(--bleu-bg);
+    border-bottom: 2px solid var(--bleu);
+    padding: 1px 3px;
+    border-radius: 2px;
+  }
+  .frag-ambre {
+    background: var(--ambre-bg);
+    border-bottom: 2px solid var(--ambre);
+    padding: 1px 3px;
+    border-radius: 2px;
+  }
+
+  /* ── Level sections ── */
+  .level-section {
+    margin-bottom: 20px;
+  }
+  .level-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--gris-200);
+  }
+  .level-header h3 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--gris-700);
+  }
+  .level-badge {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 2px 8px;
+    border-radius: 10px;
+  }
+  .level-badge-1 {
+    background: var(--or-bg);
+    color: var(--or);
+    border: 1px solid #e8d5a0;
+  }
+  .level-badge-2 {
+    background: var(--gris-100);
+    color: var(--gris-600);
+    border: 1px solid var(--gris-300);
+  }
+
+  /* ── Reference chips ── */
+  .ref-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .ref-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-radius: var(--radius);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.15s;
+    border: 1px solid transparent;
+    user-select: none;
+  }
+  .ref-chip:hover {
+    filter: brightness(0.95);
+    border-color: rgba(0,0,0,0.1);
+  }
+  .ref-chip.active {
+    box-shadow: 0 0 0 2px var(--gris-800);
+  }
+  .ref-chip-or {
+    background: var(--or-bg);
+    color: var(--or);
+    border-color: #e8d5a0;
+  }
+  .ref-chip-violet {
+    background: var(--violet-bg);
+    color: var(--violet);
+    border-color: #c4b5fd;
+  }
+  .ref-chip-vert {
+    background: var(--vert-bg);
+    color: var(--vert);
+    border-color: #86efac;
+  }
+  .ref-chip-bleu {
+    background: var(--bleu-bg);
+    color: var(--bleu);
+    border-color: #93c5fd;
+  }
+  .ref-chip-ambre {
+    background: var(--ambre-bg);
+    color: var(--ambre);
+    border-color: #fcd34d;
+  }
+
+  /* ── Fragment group ── */
+  .fragment-group {
+    margin-bottom: 14px;
+  }
+  .fragment-label {
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .fragment-label .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+  .dot-violet { background: var(--violet); }
+  .dot-vert { background: var(--vert); }
+  .dot-bleu { background: var(--bleu); }
+  .dot-ambre { background: var(--ambre); }
+
+  /* ── Reference preview panel ── */
+  .ref-preview {
+    background: #fff;
+    border: 1px solid var(--gris-200);
+    border-radius: var(--radius);
+    margin-bottom: 20px;
+    overflow: hidden;
+    display: none;
+  }
+  .ref-preview.visible { display: block; }
+  .ref-preview-header {
+    padding: 10px 16px;
+    background: var(--gris-100);
+    border-bottom: 1px solid var(--gris-200);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .ref-preview-header h4 {
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .ref-preview-body {
+    padding: 16px;
+    font-size: 15px;
+    line-height: 1.7;
+    color: var(--gris-700);
+  }
+  .ref-preview-body .loading {
+    color: var(--gris-400);
+    font-style: italic;
+  }
+  .close-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--gris-400);
+    font-size: 18px;
+    line-height: 1;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+  .close-btn:hover { background: var(--gris-200); color: var(--gris-600); }
+
+  /* ── Status / spinner ── */
+  .status-bar {
+    padding: 10px 16px;
+    font-size: 13px;
+    color: var(--gris-500);
+    border: 1px solid var(--gris-200);
+    border-radius: var(--radius);
+    background: #fff;
+    margin-bottom: 20px;
+    display: none;
+  }
+  .status-bar.visible { display: block; }
+  .spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--gris-300);
+    border-top-color: var(--gris-600);
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    vertical-align: middle;
+    margin-right: 6px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Empty state ── */
+  .empty-state {
+    text-align: center;
+    padding: 48px 24px;
+    color: var(--gris-400);
+  }
+  .empty-state p { font-size: 14px; margin-top: 8px; }
+
+  /* ── Navigation ── */
+  .nav-bar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 640px) {
+    .config-bar { flex-direction: column; align-items: stretch; }
+    .config-bar .field input[type="password"] { width: 100%; }
+    .verse-text { font-size: 16px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>maBible — Références croisées</h1>
+  <span class="subtitle">La Bible explique la Bible</span>
+</header>
+
+<div class="container">
+
+  <!-- Config bar -->
+  <div class="config-bar">
+    <div class="field">
+      <label>Clé API Anthropic</label>
+      <input type="password" id="apiKey" placeholder="sk-ant-..." />
+    </div>
+    <div class="field">
+      <label>Livre</label>
+      <select id="bookSelect"></select>
+    </div>
+    <div class="field">
+      <label>Chapitre</label>
+      <input type="number" id="chapterInput" min="1" value="3" />
+    </div>
+    <div class="field">
+      <label>Verset</label>
+      <input type="number" id="verseInput" min="1" value="16" />
+    </div>
+    <button class="btn btn-primary" id="generateBtn" onclick="generate()">Générer</button>
+    <button class="btn" id="prevBtn" onclick="navigateVerse(-1)">&#8592; Préc.</button>
+    <button class="btn" id="nextBtn" onclick="navigateVerse(1)">Suiv. &#8594;</button>
+  </div>
+
+  <!-- Status bar -->
+  <div class="status-bar" id="statusBar"></div>
+
+  <!-- Reference preview panel -->
+  <div class="ref-preview" id="refPreview">
+    <div class="ref-preview-header">
+      <h4 id="refPreviewTitle">—</h4>
+      <button class="close-btn" onclick="closePreview()">&#10005;</button>
+    </div>
+    <div class="ref-preview-body" id="refPreviewBody"></div>
+  </div>
+
+  <!-- Main results area -->
+  <div id="results"></div>
+
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════
+//  BOOK DATA (from S21 version)
+// ══════════════════════════════════════════════════════════
+const BOOKS = [
+  { code: "GEN", slug: "genesis", name: "Genèse", chapters: 50, order: 1 },
+  { code: "EXO", slug: "exodus", name: "Exode", chapters: 40, order: 2 },
+  { code: "LEV", slug: "leviticus", name: "Lévitique", chapters: 27, order: 3 },
+  { code: "NUM", slug: "numbers", name: "Nombres", chapters: 36, order: 4 },
+  { code: "DEU", slug: "deuteronomy", name: "Deutéronome", chapters: 34, order: 5 },
+  { code: "JOS", slug: "joshua", name: "Josué", chapters: 24, order: 6 },
+  { code: "JDG", slug: "judges", name: "Juges", chapters: 21, order: 7 },
+  { code: "RUT", slug: "ruth", name: "Ruth", chapters: 4, order: 8 },
+  { code: "1SA", slug: "1-samuel", name: "1 Samuel", chapters: 31, order: 9 },
+  { code: "2SA", slug: "2-samuel", name: "2 Samuel", chapters: 24, order: 10 },
+  { code: "1KI", slug: "1-kings", name: "1 Rois", chapters: 22, order: 11 },
+  { code: "2KI", slug: "2-kings", name: "2 Rois", chapters: 25, order: 12 },
+  { code: "1CH", slug: "1-chronicles", name: "1 Chroniques", chapters: 29, order: 13 },
+  { code: "2CH", slug: "2-chronicles", name: "2 Chroniques", chapters: 36, order: 14 },
+  { code: "EZR", slug: "ezra", name: "Esdras", chapters: 10, order: 15 },
+  { code: "NEH", slug: "nehemiah", name: "Néhémie", chapters: 13, order: 16 },
+  { code: "EST", slug: "esther", name: "Esther", chapters: 10, order: 17 },
+  { code: "JOB", slug: "job", name: "Job", chapters: 42, order: 18 },
+  { code: "PSA", slug: "psalms", name: "Psaumes", chapters: 150, order: 19 },
+  { code: "PRO", slug: "proverbs", name: "Proverbes", chapters: 31, order: 20 },
+  { code: "ECC", slug: "ecclesiastes", name: "Ecclésiaste", chapters: 12, order: 21 },
+  { code: "SNG", slug: "song-of-songs", name: "Cantique", chapters: 8, order: 22 },
+  { code: "ISA", slug: "isaiah", name: "Ésaïe", chapters: 66, order: 23 },
+  { code: "JER", slug: "jeremiah", name: "Jérémie", chapters: 52, order: 24 },
+  { code: "LAM", slug: "lamentations", name: "Lamentations", chapters: 5, order: 25 },
+  { code: "EZK", slug: "ezekiel", name: "Ézéchiel", chapters: 48, order: 26 },
+  { code: "DAN", slug: "daniel", name: "Daniel", chapters: 12, order: 27 },
+  { code: "HOS", slug: "hosea", name: "Osée", chapters: 14, order: 28 },
+  { code: "JOL", slug: "joel", name: "Joël", chapters: 4, order: 29 },
+  { code: "AMO", slug: "amos", name: "Amos", chapters: 9, order: 30 },
+  { code: "OBA", slug: "obadiah", name: "Abdias", chapters: 1, order: 31 },
+  { code: "JON", slug: "jonah", name: "Jonas", chapters: 4, order: 32 },
+  { code: "MIC", slug: "micah", name: "Michée", chapters: 7, order: 33 },
+  { code: "NAM", slug: "nahum", name: "Nahum", chapters: 3, order: 34 },
+  { code: "HAB", slug: "habakkuk", name: "Habacuc", chapters: 3, order: 35 },
+  { code: "ZEP", slug: "zephaniah", name: "Sophonie", chapters: 3, order: 36 },
+  { code: "HAG", slug: "haggai", name: "Aggée", chapters: 2, order: 37 },
+  { code: "ZEC", slug: "zechariah", name: "Zacharie", chapters: 14, order: 38 },
+  { code: "MAL", slug: "malachi", name: "Malachie", chapters: 3, order: 39 },
+  { code: "MAT", slug: "matthew", name: "Matthieu", chapters: 28, order: 40 },
+  { code: "MRK", slug: "mark", name: "Marc", chapters: 16, order: 41 },
+  { code: "LUK", slug: "luke", name: "Luc", chapters: 24, order: 42 },
+  { code: "JHN", slug: "john", name: "Jean", chapters: 21, order: 43 },
+  { code: "ACT", slug: "acts", name: "Actes", chapters: 28, order: 44 },
+  { code: "ROM", slug: "romans", name: "Romains", chapters: 16, order: 45 },
+  { code: "1CO", slug: "1-corinthians", name: "1 Corinthiens", chapters: 16, order: 46 },
+  { code: "2CO", slug: "2-corinthians", name: "2 Corinthiens", chapters: 13, order: 47 },
+  { code: "GAL", slug: "galatians", name: "Galates", chapters: 6, order: 48 },
+  { code: "EPH", slug: "ephesians", name: "Éphésiens", chapters: 6, order: 49 },
+  { code: "PHP", slug: "philippians", name: "Philippiens", chapters: 4, order: 50 },
+  { code: "COL", slug: "colossians", name: "Colossiens", chapters: 4, order: 51 },
+  { code: "1TH", slug: "1-thessalonians", name: "1 Thessaloniciens", chapters: 5, order: 52 },
+  { code: "2TH", slug: "2-thessalonians", name: "2 Thessaloniciens", chapters: 3, order: 53 },
+  { code: "1TI", slug: "1-timothy", name: "1 Timothée", chapters: 6, order: 54 },
+  { code: "2TI", slug: "2-timothy", name: "2 Timothée", chapters: 4, order: 55 },
+  { code: "TIT", slug: "titus", name: "Tite", chapters: 3, order: 56 },
+  { code: "PHM", slug: "philemon", name: "Philémon", chapters: 1, order: 57 },
+  { code: "HEB", slug: "hebrews", name: "Hébreux", chapters: 13, order: 58 },
+  { code: "JAS", slug: "james", name: "Jacques", chapters: 5, order: 59 },
+  { code: "1PE", slug: "1-peter", name: "1 Pierre", chapters: 5, order: 60 },
+  { code: "2PE", slug: "2-peter", name: "2 Pierre", chapters: 3, order: 61 },
+  { code: "1JN", slug: "1-john", name: "1 Jean", chapters: 5, order: 62 },
+  { code: "2JN", slug: "2-john", name: "2 Jean", chapters: 1, order: 63 },
+  { code: "3JN", slug: "3-john", name: "3 Jean", chapters: 1, order: 64 },
+  { code: "JUD", slug: "jude", name: "Jude", chapters: 1, order: 65 },
+  { code: "REV", slug: "revelation", name: "Apocalypse", chapters: 22, order: 66 },
+];
+
+// ══════════════════════════════════════════════════════════
+//  DEMO DATA — Jean 3:16 (fully validated)
+// ══════════════════════════════════════════════════════════
+const DEMO_JEAN_3_16 = {
+  reference: "Jean 3:16",
+  bookSlug: "john",
+  chapter: 3,
+  verse: 16,
+  textS21: "En effet, Dieu a tant aimé le monde qu'il a donné son Fils unique afin que quiconque croit en lui ne périsse pas mais ait la vie éternelle.",
+  fragments: [
+    { id: "violet", color: "violet", label: "Car Dieu a tant aimé le monde",
+      textInVerse: "Dieu a tant aimé le monde" },
+    { id: "vert", color: "vert", label: "qu'il a donné son Fils unique",
+      textInVerse: "qu'il a donné son Fils unique" },
+    { id: "bleu", color: "bleu", label: "afin que quiconque croit en lui ne périsse pas",
+      textInVerse: "afin que quiconque croit en lui ne périsse pas" },
+    { id: "ambre", color: "ambre", label: "mais qu'il ait la vie éternelle",
+      textInVerse: "mais ait la vie éternelle" },
+  ],
+  niveau1: [
+    { ref: "Romains 5:8", slug: "romans", chapter: 5, verse: 8 },
+    { ref: "1 Jean 4:9-10", slug: "1-john", chapter: 4, verse: 9 },
+    { ref: "Romains 8:32", slug: "romans", chapter: 8, verse: 32 },
+    { ref: "Jean 3:36", slug: "john", chapter: 3, verse: 36 },
+    { ref: "Jean 11:25-26", slug: "john", chapter: 11, verse: 25 },
+  ],
+  niveau2: {
+    violet: [
+      { ref: "1 Jean 4:19", slug: "1-john", chapter: 4, verse: 19 },
+      { ref: "Éphésiens 2:4", slug: "ephesians", chapter: 2, verse: 4 },
+      { ref: "2 Thessaloniciens 2:16", slug: "2-thessalonians", chapter: 2, verse: 16 },
+    ],
+    vert: [
+      { ref: "Romains 8:32", slug: "romans", chapter: 8, verse: 32 },
+      { ref: "Jean 1:14", slug: "john", chapter: 1, verse: 14 },
+      { ref: "Jean 1:18", slug: "john", chapter: 1, verse: 18 },
+    ],
+    bleu: [
+      { ref: "Jean 6:40", slug: "john", chapter: 6, verse: 40 },
+      { ref: "Jean 3:15", slug: "john", chapter: 3, verse: 15 },
+      { ref: "Jean 10:28", slug: "john", chapter: 10, verse: 28 },
+    ],
+    ambre: [
+      { ref: "Jean 17:3", slug: "john", chapter: 17, verse: 3 },
+      { ref: "1 Jean 5:11", slug: "1-john", chapter: 5, verse: 11 },
+      { ref: "Romains 6:23", slug: "romans", chapter: 6, verse: 23 },
+    ],
+  },
+};
+
+// ══════════════════════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════════════════════
+let currentData = null;
+let activeChipRef = null;
+
+// ══════════════════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════════════════
+function init() {
+  const sel = document.getElementById("bookSelect");
+  BOOKS.forEach(b => {
+    const opt = document.createElement("option");
+    opt.value = b.slug;
+    opt.textContent = b.name;
+    sel.appendChild(opt);
+  });
+  sel.value = "john";
+
+  // Load demo data on start
+  renderResults(DEMO_JEAN_3_16);
+}
+
+// ══════════════════════════════════════════════════════════
+//  RENDERING
+// ══════════════════════════════════════════════════════════
+function renderResults(data) {
+  currentData = data;
+  const container = document.getElementById("results");
+
+  // ── Build verse display with colored fragments ──
+  let verseHtml = data.textS21;
+  if (data.fragments && data.fragments.length > 0) {
+    // Apply fragments in reverse order of appearance to avoid offset issues
+    const sorted = [...data.fragments].sort((a, b) => {
+      return verseHtml.indexOf(b.textInVerse) - verseHtml.indexOf(a.textInVerse);
+    });
+    sorted.forEach(f => {
+      const idx = verseHtml.indexOf(f.textInVerse);
+      if (idx !== -1) {
+        verseHtml = verseHtml.substring(0, idx)
+          + `<span class="frag-${f.color}">${f.textInVerse}</span>`
+          + verseHtml.substring(idx + f.textInVerse.length);
+      }
+    });
+  }
+
+  // ── Niveau 1 chips ──
+  const n1Chips = (data.niveau1 || []).map(r =>
+    `<span class="ref-chip ref-chip-or" data-slug="${r.slug}" data-chapter="${r.chapter}" data-verse="${r.verse}" onclick="showRef(this, '${r.ref}', '${r.slug}', ${r.chapter}, ${r.verse})">${r.ref}</span>`
+  ).join("");
+
+  // ── Niveau 2 fragment groups ──
+  let n2Html = "";
+  if (data.fragments && data.niveau2) {
+    data.fragments.forEach(f => {
+      const refs = data.niveau2[f.id] || [];
+      if (refs.length === 0) return;
+      const chips = refs.map(r =>
+        `<span class="ref-chip ref-chip-${f.color}" data-slug="${r.slug}" data-chapter="${r.chapter}" data-verse="${r.verse}" onclick="showRef(this, '${r.ref}', '${r.slug}', ${r.chapter}, ${r.verse})">${r.ref}</span>`
+      ).join("");
+      n2Html += `
+        <div class="fragment-group">
+          <div class="fragment-label">
+            <span class="dot dot-${f.color}"></span>
+            <span>${f.label}</span>
+          </div>
+          <div class="ref-list">${chips}</div>
+        </div>`;
+    });
+  }
+
+  container.innerHTML = `
+    <div class="verse-card">
+      <div class="verse-card-header">
+        <h2>${data.reference}</h2>
+        <span class="version-badge">S21</span>
+      </div>
+      <div class="verse-text">${verseHtml}</div>
+    </div>
+
+    <div class="level-section">
+      <div class="level-header">
+        <span class="level-badge level-badge-1">Niveau 1</span>
+        <h3>Verset entier</h3>
+      </div>
+      <div class="ref-list">${n1Chips || '<span style="color:var(--gris-400); font-size:13px;">Aucune référence</span>'}</div>
+    </div>
+
+    <div class="level-section">
+      <div class="level-header">
+        <span class="level-badge level-badge-2">Niveau 2</span>
+        <h3>Par fragment</h3>
+      </div>
+      ${n2Html || '<span style="color:var(--gris-400); font-size:13px;">Aucun fragment</span>'}
+    </div>
+  `;
+}
+
+// ══════════════════════════════════════════════════════════
+//  REFERENCE PREVIEW (click on chip)
+// ══════════════════════════════════════════════════════════
+function showRef(chipEl, refLabel, slug, chapter, verse) {
+  // Toggle active state
+  document.querySelectorAll(".ref-chip.active").forEach(c => c.classList.remove("active"));
+  chipEl.classList.add("active");
+
+  const panel = document.getElementById("refPreview");
+  const title = document.getElementById("refPreviewTitle");
+  const body = document.getElementById("refPreviewBody");
+
+  title.textContent = refLabel;
+  body.innerHTML = '<span class="loading">Chargement du texte...</span>';
+  panel.classList.add("visible");
+
+  // Fetch verse text from API
+  fetchVerseText(slug, chapter, verse).then(text => {
+    body.textContent = text;
+  }).catch(err => {
+    body.innerHTML = `<span class="loading">Erreur : ${err.message}</span>`;
+  });
+}
+
+function closePreview() {
+  document.getElementById("refPreview").classList.remove("visible");
+  document.querySelectorAll(".ref-chip.active").forEach(c => c.classList.remove("active"));
+}
+
+// ══════════════════════════════════════════════════════════
+//  API — Fetch verse text from maBible
+// ══════════════════════════════════════════════════════════
+const API_BASE = "https://mcp-api.dev.mabible.com";
+const chapterCache = {};
+
+async function fetchVerseText(slug, chapter, verse) {
+  const key = `s21.${slug}.${chapter}`;
+  if (!chapterCache[key]) {
+    const resp = await fetch(`${API_BASE}/chapters/${key}`);
+    if (!resp.ok) throw new Error(`API ${resp.status}`);
+    chapterCache[key] = await resp.json();
+  }
+  const data = chapterCache[key];
+  const fragments = data.chapter.fragments;
+
+  // Build verse reference ID: order(2-3 digits) + chapter(3 digits) + verse(3 digits)
+  const book = BOOKS.find(b => b.slug === slug);
+  if (!book) throw new Error("Livre inconnu");
+  const refId = book.order * 1000000 + chapter * 1000 + verse;
+
+  const parts = fragments
+    .filter(f => f.joinToReferenceId === refId)
+    .map(f => f.content.replace(/<br\s*\/?>/g, "").trim());
+
+  if (parts.length === 0) throw new Error("Verset non trouvé");
+  return parts.join(" ");
+}
+
+// ══════════════════════════════════════════════════════════
+//  NAVIGATION
+// ══════════════════════════════════════════════════════════
+function navigateVerse(delta) {
+  const v = document.getElementById("verseInput");
+  const newVal = parseInt(v.value, 10) + delta;
+  if (newVal < 1) return;
+  v.value = newVal;
+  generate();
+}
+
+// ══════════════════════════════════════════════════════════
+//  GENERATE (stub — will call Claude API in next part)
+// ══════════════════════════════════════════════════════════
+function generate() {
+  const slug = document.getElementById("bookSelect").value;
+  const chapter = parseInt(document.getElementById("chapterInput").value, 10);
+  const verse = parseInt(document.getElementById("verseInput").value, 10);
+
+  // If it's Jean 3:16, use demo data
+  if (slug === "john" && chapter === 3 && verse === 16) {
+    closePreview();
+    renderResults(DEMO_JEAN_3_16);
+    return;
+  }
+
+  // Placeholder for API integration
+  showStatus("La génération via Claude API sera disponible dans la prochaine étape.");
+}
+
+// ══════════════════════════════════════════════════════════
+//  STATUS BAR
+// ══════════════════════════════════════════════════════════
+function showStatus(msg, spinning = false) {
+  const bar = document.getElementById("statusBar");
+  bar.innerHTML = (spinning ? '<span class="spinner"></span>' : '') + msg;
+  bar.classList.add("visible");
+}
+
+function hideStatus() {
+  document.getElementById("statusBar").classList.remove("visible");
+}
+
+// ── Boot ──
+init();
+</script>
+
+</body>
+</html>
