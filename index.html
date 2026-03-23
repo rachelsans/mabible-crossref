@@ -735,22 +735,182 @@ function navigateVerse(delta) {
 }
 
 // ══════════════════════════════════════════════════════════
-//  GENERATE (stub — will call Claude API in next part)
+//  GENERATE — full pipeline: fetch verse → call Claude → render
 // ══════════════════════════════════════════════════════════
-function generate() {
+async function generate() {
   const slug = document.getElementById("bookSelect").value;
   const chapter = parseInt(document.getElementById("chapterInput").value, 10);
   const verse = parseInt(document.getElementById("verseInput").value, 10);
+  const apiKey = document.getElementById("apiKey").value.trim();
+  const book = BOOKS.find(b => b.slug === slug);
+  if (!book) return;
 
   // If it's Jean 3:16, use demo data
   if (slug === "john" && chapter === 3 && verse === 16) {
     closePreview();
+    hideStatus();
     renderResults(DEMO_JEAN_3_16);
     return;
   }
 
-  // Placeholder for API integration
-  showStatus("La génération via Claude API sera disponible dans la prochaine étape.");
+  if (!apiKey) {
+    showStatus("Veuillez saisir votre clé API Anthropic pour générer les références croisées.");
+    return;
+  }
+
+  const btn = document.getElementById("generateBtn");
+  btn.disabled = true;
+  closePreview();
+
+  try {
+    // Step 1 — Fetch verse text from maBible
+    showStatus("Récupération du texte S21…", true);
+    let verseText;
+    try {
+      verseText = await fetchVerseText(slug, chapter, verse);
+    } catch (e) {
+      showStatus(`Impossible de récupérer le verset : ${e.message}`);
+      btn.disabled = false;
+      return;
+    }
+
+    const reference = `${book.name} ${chapter}:${verse}`;
+
+    // Step 2 — Call Claude to generate cross-references
+    showStatus(`Génération des références croisées pour ${reference}…`, true);
+    const crossRefs = await callClaude(apiKey, reference, verseText);
+
+    // Step 3 — Transform Claude's response into our display format
+    const data = transformClaudeResponse(crossRefs, reference, slug, chapter, verse, verseText);
+    hideStatus();
+    renderResults(data);
+
+  } catch (err) {
+    showStatus(`Erreur : ${err.message}`);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  CLAUDE API — prompt with 9 editorial rules
+// ══════════════════════════════════════════════════════════
+const FRAGMENT_COLORS = ["violet", "vert", "bleu", "ambre"];
+
+function buildPrompt(reference, verseText) {
+  return `Tu es un expert en théologie biblique et en références croisées. Tu appliques la ligne éditoriale « La Bible explique la Bible » : aucun commentaire éditorial, les textes parlent d'eux-mêmes.
+
+VERSET À ANALYSER :
+${reference} (S21) : « ${verseText} »
+
+RÈGLES ÉDITORIALES (les 9 règles) :
+1. Version de référence — S21 par défaut, grec/hébreu en arbitre en cas de doute.
+2. Granularité minimale — jamais un fragment de verset, verset entier minimum.
+3. Blocs autorisés — plusieurs versets consécutifs si unité de sens indissociable (ex. Jean 11:25–26). Utilise le tiret demi-cadratin « – » pour les plages.
+4. Quantité — aucun minimum ni maximum, densité théologique seule décide. Principe : 5 références parfaites valent mieux que 8 dont certaines compensent ce qu'on a descendu d'un niveau.
+5. Test d'inclusion — 3 cas : éclaire (retenu) / complète seulement (écarté ou déplacé) / illustre une condition implicite du texte (recevable si elle explicite le sous-entendu).
+6. Périmètre Niveau 1 — réseau thématique large du verset entier, mais chaque référence doit éclairer le verset entier, pas seulement un de ses fragments.
+7. Doublons — autorisés entre Niveau 1 et Niveau 2 si l'angle explicatif est différent à chaque niveau.
+8. Références typologiques — figure humaine → Niveau 1 uniquement, jamais Niveau 2.
+9. Figures humaines déléguées — le lien avec Dieu ou Christ doit être explicite dans le texte de référence, on ne fait pas le lien à la place du lecteur.
+
+DEUX NIVEAUX DE RÉFÉRENCES :
+- Niveau 1 : références qui éclairent le verset dans son ensemble.
+- Niveau 2 : découpe le verset en fragments (unités de sens). Chaque fragment reçoit ses propres références. Utilise exactement les couleurs : "violet", "vert", "bleu", "ambre" (dans cet ordre, max 4 fragments).
+
+CONSIGNES DE FORMAT :
+- Les références doivent utiliser les noms français des livres bibliques (ex: « Romains 5:8 », « 1 Jean 4:9–10 »).
+- Pour les plages de versets, utilise le tiret demi-cadratin : « Jean 11:25–26 ».
+- Chaque référence doit inclure le slug du livre (identifiant technique en anglais, ex: "romans", "1-john", "john"), le chapitre, et le premier verset.
+
+Réponds UNIQUEMENT avec un objet JSON valide (sans markdown, sans backticks) respectant ce schéma exact :
+{
+  "fragments": [
+    {
+      "id": "violet",
+      "color": "violet",
+      "label": "texte du fragment tel qu'il apparaît dans le verset",
+      "textInVerse": "texte exact à surligner dans le verset S21"
+    }
+  ],
+  "niveau1": [
+    { "ref": "Romains 5:8", "slug": "romans", "chapter": 5, "verse": 8 }
+  ],
+  "niveau2": {
+    "violet": [
+      { "ref": "Éphésiens 2:4", "slug": "ephesians", "chapter": 2, "verse": 4 }
+    ]
+  }
+}`;
+}
+
+async function callClaude(apiKey, reference, verseText) {
+  const prompt = buildPrompt(reference, verseText);
+
+  const resp = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true",
+    },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 4096,
+      messages: [
+        { role: "user", content: prompt }
+      ],
+    }),
+  });
+
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw new Error(err.error?.message || `API Anthropic ${resp.status}`);
+  }
+
+  const result = await resp.json();
+  const text = result.content?.[0]?.text;
+  if (!text) throw new Error("Réponse vide de Claude");
+
+  // Parse JSON — strip any accidental markdown fences
+  const cleaned = text.replace(/^```json?\s*/i, "").replace(/\s*```$/i, "").trim();
+  try {
+    return JSON.parse(cleaned);
+  } catch (e) {
+    throw new Error("Réponse de Claude non parsable en JSON. Réessayez.");
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  Transform Claude's response into render-ready format
+// ══════════════════════════════════════════════════════════
+function transformClaudeResponse(cr, reference, slug, chapter, verse, verseText) {
+  return {
+    reference,
+    bookSlug: slug,
+    chapter,
+    verse,
+    textS21: verseText,
+    fragments: (cr.fragments || []).map(f => ({
+      id: f.id || f.color,
+      color: f.color,
+      label: f.label,
+      textInVerse: f.textInVerse,
+    })),
+    niveau1: (cr.niveau1 || []).map(r => ({
+      ref: r.ref,
+      slug: r.slug,
+      chapter: r.chapter,
+      verse: r.verse,
+    })),
+    niveau2: Object.fromEntries(
+      Object.entries(cr.niveau2 || {}).map(([key, refs]) => [
+        key,
+        refs.map(r => ({ ref: r.ref, slug: r.slug, chapter: r.chapter, verse: r.verse }))
+      ])
+    ),
+  };
 }
 
 // ══════════════════════════════════════════════════════════
